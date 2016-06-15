@@ -1,0 +1,20 @@
+(
+	permutation=/student/csc209/a1/permute
+	palindrome=/student/csc209/a1/ispalindrome
+	
+	echo "$($permutation $@)" | (while read line
+	do
+		a=$line
+		echo $a | tr -d "[:blank:]" | (while read i
+		do
+			$($palindrome $i)
+			if [ $? -eq 0 ]
+			then
+				echo $a
+			fi 	
+		done
+		)
+	done
+	)
+	
+)

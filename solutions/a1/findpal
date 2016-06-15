@@ -1,0 +1,10 @@
+PATH=/bin:/usr/bin:/student/csc209/a1
+
+permute "$@" |
+    while read line
+    do
+	if ispalindrome "$line"
+	then
+	    echo "$line"
+	fi
+    done

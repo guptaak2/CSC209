@@ -1,0 +1,9 @@
+The external 'cd' command changes the current directory of that new process.
+If _that_ process were to fork any child processes of its own, the subsequent
+processes would inherit its new current working directory.  However, this
+does not affect fsh, which is the parent of that process.
+
+Thus cd needs to be a built-in for pretty much the same reason that exit
+does: we want to change the current working directory of THIS process, and
+all future children of this process, but changing the current working
+directory of some other existing process does not accomplish that.

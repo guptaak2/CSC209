@@ -1,0 +1,35 @@
+[guptaak2@cslinux a4]$ ./chatclient 127.0.0.1
+Enter your 'handle': akhil
+chatsvr: Welcome to our new participant, akhil
+chatsvr: Welcome to our new participant, Marvin
+Marvin: hello 
+hello
+akhil: hello
+hey marvin, 2+4
+akhil: hey marvin, 2+4
+Marvin: Hey akhil, 6
+hey marvin, 2+4+6+8+10
+akhil: hey marvin, 2+4+6+8+10
+Marvin: Hey akhil, 30
+chatsvr: Goodbye, Marvin
+chatsvr: Welcome to our new participant, hello
+hello: this is cool
+
+[guptaak2@cslinux a4]$ ./marvin 127.0.0.1
+chatsvr: Welcome to our new participant, Marvin
+hello 
+Marvin: hello 
+akhil: hello
+akhil: hey marvin, 2+4
+Marvin: Hey akhil, 6
+akhil: hey marvin, 2+4+6+8+10
+Marvin: Hey akhil, 30
+
+
+[guptaak2@cslinux a4]$ nc localhost 1234
+chatsvr 305975789
+hello
+chatsvr: Welcome to our new participant, hello
+this is cool
+hello: this is cool
+chatsvr: Goodbye, akhil

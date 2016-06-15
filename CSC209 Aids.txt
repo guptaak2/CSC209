@@ -1,0 +1,1189 @@
+Q: Write a C program which listens on port number 1234 and tells each caller 
+how many people have connected so far. You could connect to it by typing 
+"telnet hostname 1234" (for the appropriate hostname), and it would output 
+"1" and close the connection. The next person would be told "2", etc. 
+The program does not exit (until it is killed).
+
+int main()
+{
+    int count = 0;
+    struct sockaddr_in r, q;
+    int listenfd, clientfd;
+
+    if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("socket");
+        exit(1);
+    }
+
+    memset((char *)&r, '\0', sizeof r);
+    r.sin_family = AF_INET;
+    r.sin_addr.s_addr = INADDR_ANY;
+    r.sin_port = htons(1234);
+
+    if (bind(listenfd, (struct sockaddr *)&r, sizeof r)) {
+        perror("bind");
+        exit(1);
+    }
+
+    if (listen(listenfd, 5)) {
+        perror("listen");
+        exit(1);
+    }
+
+    while (1) {
+        char buf[30];
+        socklen_t len = sizeof q;
+        if ((clientfd = accept(listenfd, (struct sockaddr *)&q, &len)) < 0) {
+            perror("accept");
+            return(1);
+        }
+        sprintf(buf, "%d\r\n", ++count);
+        write(clientfd, buf, strlen(buf));
+        close(clientfd);
+    }
+}
+
+Q: Write a C program which listens on port number 1234 and receives a series of connections. It will handle only one connection at a time. Once a user connects, it will run a "chat" between the user connecting over the network (e.g. with "telnet") and the user running the program (and with access to its stdin and stdout). When the remote user disconnects, your program will wait for the next user, until it is killed. (everything upto while (1) is from answer above, no int count = 0)
+
+while (1) {
+	char buf[30];
+	socklen_t len = sizeof q;
+	if ((clientfd = accept(listenfd, (struct sockaddr *)&q, &len)) < 0) {
+	    perror("accept");
+	    return(1);
+	}
+	while (1) {
+	    fd_set fdlist;
+	    int from, to, n;
+	    FD_ZERO(&fdlist);
+	    FD_SET(clientfd, &fdlist);
+	    FD_SET(0, &fdlist);
+	    if (select(clientfd+1, &fdlist, NULL, NULL, NULL) < 0) {
+			perror("select");
+			exit(1);
+	    }
+	    if (FD_ISSET(0, &fdlist)) {
+			from = 0;
+			to = clientfd;
+	    } else {
+			from = clientfd;
+			to = 0;
+	    }
+	    if ((n = read(from, buf, sizeof buf)) < 0) {
+			perror("read");
+			exit(1);
+	    }
+	    if (n == 0)
+			break;
+	    if (write(to, buf, n) != n) {
+			perror("write");
+			exit(1);
+	    }
+	}
+	close(clientfd);
+}
+
+
+Q: Write a program which listens on port 3000 (AF_INET). When someone connects to this port, it outputs "hello". Then it accepts another connection (thus waiting until someone else connects). When a second person connects, it outputs "goodbye" to the first person and drops their connection; and outputs "hello" to the second person. It continues like this indefinitely, hanging up on each person when and only when the next person connects. The outputs are lines, terminated with a network newline (CRLF). (everything upto while (1) is from answer above, no int count = 0, but add int fd, clientfd, newclientfd)
+
+    clientfd = -1;
+    while (1) {
+	len = sizeof q;
+	if ((newclientfd = accept(fd, (struct sockaddr *)&q, &len)) < 0) {
+	    perror("accept");
+	    return(1);
+	}
+	if (clientfd >= 0) {
+	    if (write(clientfd, "goodbye\r\n", 9) != 9)
+		perror("write");
+	    close(clientfd);
+	}
+	if (write(newclientfd, "hello\r\n", 7) != 7)
+	    perror("write");
+		clientfd = newclientfd;
+    }
+
+Q: Write a simplified version of cmp in C. cmp takes two filename arguments. It reads the files in parallel, one byte (character) at a time, until it reaches a difference. If the files are identical, it exits with no output.
+If one file ends before the other, but the files are identical up to that point, the message is of the format "EOF on filename" (specifying the appropriate file name). If the files' characters differ at a particular point, it outputs a message of the format "file1 file2 differ: char 123" (using the two file names, and the byte position in the file (one-origin) of the difference).
+The exit status is 0 if the files match; 1 if the files differ; and 2 if there is an error of any kind.
+
+int main(int argc, char **argv)
+{
+    FILE *fp1, *fp2;
+    int c, d, i;
+
+    if (argc != 3) {
+        fprintf(stderr, "usage: cmp file1 file2\n");
+        return(2);
+    }
+
+    if ((fp1 = fopen(argv[1], "r")) == NULL) {
+        perror(argv[1]);
+        return(2);
+    }
+    if ((fp2 = fopen(argv[2], "r")) == NULL) {
+        perror(argv[2]);
+        return(2);
+    }
+
+    /* read until EOF on either file OR a different char in the two files */
+    for (i = 1;
+            c = getc(fp1), d = getc(fp2), c != EOF && d != EOF && c == d;
+            i++)
+        ;
+
+    if (c == EOF && d == EOF)
+        return(0);
+    if (c == EOF) {
+        printf("eof on %s\n", argv[1]);
+        return(1);
+    }
+    if (d == EOF) {
+        printf("eof on %s\n", argv[2]);
+        return(1);
+    }
+    printf("%s %s differ: char %d\n", argv[1], argv[2], i);
+    return(1);
+}
+
+Q: Write a simplified version of man in C.
+Your man command will take zero or more arguments, and loop through them. For each argument, it searches all eight possible 'man' directories, in order, for a file name beginning with the supplied name and a dot. For the first one it finds, it executes /usr/bin/less (using fork() and execl()), specifying the absolute path name to the appropriate file as argv[1].
+The man directories are /usr/share/catman/man1, /usr/share/catman/man2, and so on through /usr/share/catman/man8 (inclusive).
+
+#define CATMAN "/usr/share/catman"
+#define LESS "/usr/bin/less"
+extern char *find(int manno, char *name);
+extern void man(int manno, char *filename);
+
+int main(int argc, char **argv)
+{
+    int i;
+    char *p;
+
+    for (argc--, argv++; argc > 0; argc--, argv++) {
+        for (i = 1; i <= 8 && (p = find(i, *argv)) == NULL; i++)
+            ;
+        if (p)
+            man(i, p);
+        else
+            fprintf(stderr, "No manual entry for %s\n", *argv);
+    }
+    return(0);
+}
+
+char *find(int manno, char *name)
+{
+    char dirname[100];
+    DIR *dp;
+    struct dirent *r;
+    extern int ismatch(char *name, char *filename);
+
+    sprintf(dirname, "%s/man%d", CATMAN, manno);
+    if ((dp = opendir(dirname)) == NULL) {
+        perror(dirname);
+        exit(1);
+    }
+    while ((r = readdir(dp)) && !ismatch(name, r->d_name))
+        ;
+    closedir(dp);
+    return(r ? r->d_name : NULL);
+}
+
+int ismatch(char *name, char *filename)
+{
+    int len = strlen(name);
+    return(strncmp(name, filename, len) == 0 && filename[len] == '.');
+}
+
+void man(int manno, char *filename)
+{
+    /* max dirname size is <100, and max filename size in bsd fsys is 256 */
+    char fullpath[356];
+    int pid = fork();
+    if (pid == -1) {
+        perror("fork");
+        exit(1);
+    } else if (pid == 0) {
+        sprintf(fullpath, "%s/man%d/%s", CATMAN, manno, filename);
+        execl(LESS, "less", fullpath, (char *)NULL);
+        perror(LESS);
+        exit(1);
+    } else {
+        if (wait((int *)NULL) < 0)
+            perror("wait");
+    }
+}
+
+Q: Write a C program which is like an extremely-limited version of "test". It expects to be run with two command-line arguments (otherwise it emits a usage message in the usual way). Both command-line arguments should be integers. Your program will exit with exit status 0, 1, or 2 in accordance with whether the first argument is less than, equal to, or greater than the second. You can assume that the strings are valid integers (if they exist -- i.e. you still have to test the argument count).
+
+int main(int argc, char **argv)
+{
+    int x, y;
+    if (argc != 3) {
+		fprintf(stderr, "usage: test x y\n");
+		return(3);
+    }
+    x = atoi(argv[1]);
+    y = atoi(argv[2]);
+    if (x < y)
+		return(0);
+    else if (x == y)
+		return(1);
+    else
+		return(2);
+}
+
+Q: Write a program which creates two child processes using fork(), each connected with a pipe so they can send data to the parent. One of the children writes the number "12" to the parent over its pipe. The other child writes the number "49" to the parent over its pipe. The parent reads both of these and adds them and outputs the sum to stdout.
+Note: the children must execute in parallel; start them both before reading from either.
+
+int main()
+{
+    int x, y;
+    extern void dofork(int i, int *fd);
+    extern int readint(int fd);
+    dofork(12, &x);
+    dofork(49, &y);
+    printf("%d\n", readint(x) + readint(y));
+    return(0);
+}
+
+void dofork(int i, int *fd)
+{
+    int pipefd[2];
+    if (pipe(pipefd)) {
+		perror("pipe");
+		exit(1);
+    }
+    switch (fork()) {
+    case -1:
+		perror("fork");
+		exit(1);
+    case 0:
+		if (write(pipefd[1], &i, sizeof i) != sizeof i) {
+	    	perror("write");
+		    exit(1);
+		}
+		exit(0);
+    default:
+		*fd = pipefd[0];
+    }
+}
+
+int readint(int fd)
+{
+    int x;
+    if (read(fd, &x, sizeof x) != sizeof x) {
+		fprintf(stderr, "read problems\n");  /* good enough for a test... */
+		exit(1);
+    }
+    return(x);
+}
+
+Q: Write a C program to look at all files under the current directory, recursively, and look for a file named "squid". If it finds one, it outputs either the path name relative to the current directory, or how many subdirectories deep it is, whichever you find easiest. If no such file name is found, it outputs "not found".
+
+int main()
+{
+    extern void rfind(int depth);
+    rfind(0);
+    printf("not found\n");
+    return(0);
+}
+
+void rfind(int depth)
+{
+    DIR *dp;
+    struct dirent *r;
+    struct stat statbuf;
+
+    if ((dp = opendir(".")) == NULL) {
+		perror("opendir");
+		exit(1);
+    }
+    while ((r = readdir(dp))) {
+	if (strcmp(r->d_name, "squid") == 0) {
+	    printf("%d\n", depth);
+	    exit(0);
+	}
+	if (lstat(r->d_name, &statbuf)) {
+	    perror(r->d_name);
+	    exit(1);
+	}
+	if (S_ISDIR(statbuf.st_mode) && strcmp(r->d_name, ".") 
+							&& strcmp(r->d_name, "..")) {
+	    if (chdir(r->d_name)) {
+			perror(r->d_name);
+			exit(1);
+	    }
+	    rfind(depth+1);
+	    if (chdir("..")) {
+			perror("..");
+			exit(1);
+	    }
+	}
+    }
+    closedir(dp);
+}
+
+Q: Write the library function "fgets" in terms of getc().
+
+char *myfgets(char *buf, int size, FILE *fp)
+{
+    int pos, c;
+    pos = 0;
+    while (size - pos > 1) {
+	if ((c = getc(fp)) == EOF) {
+	    if (pos)
+		break;
+	    return(NULL);
+	}
+	buf[pos++] = c;
+	if (c == '\n')
+	    break;
+    }
+    buf[pos] = '\0';
+    return(buf);
+}
+
+Q: Write a C program which is a simplified version of the "test" command. Your program will support only -f (test if a file exists and is a plain file), the two numeric relational operators -lt and -eq (the other four are very similar, after all), and the two string relational operators = and !=. So argc needs to be 3 for -f and 4 otherwise. You need to check the command-line syntax but you do not need to check that the numbers are actually numeric.
+
+int main(int argc, char **argv)
+{
+    extern int fexists(char *file), usage();
+
+    if (argc == 3 && strcmp(argv[1], "-f") == 0)
+	return(fexists(argv[2]));
+    else if (argc != 4)
+	return(usage());
+    else if (strcmp(argv[2], "-lt") == 0)
+	return(!(atoi(argv[1]) < atoi(argv[3])));
+    else if (strcmp(argv[2], "-eq") == 0)
+	return(!(atoi(argv[1]) == atoi(argv[3])));
+    else if (strcmp(argv[2], "!=") == 0)
+	return(!strcmp(argv[1], argv[3]));
+    else if (strcmp(argv[2], "=") == 0)
+	return(!!strcmp(argv[1], argv[3]));
+    else
+	return(usage());
+}
+
+int fexists(char *file)
+{
+    struct stat statbuf;
+    return(lstat(file, &statbuf) < 0 || !S_ISREG(statbuf.st_mode));
+}
+
+int usage()
+{
+    fprintf(stderr, "usage: test { -f file | item1 {-lt|-gt|=|!=} item2 }\n");
+    return(2);  /* for the exam, it's ok if you used exit status of 1 here */
+}
+
+Q: Write a shell script (in the "sh" programming language) which takes one or more file name arguments, and outputs the name of the file which has the most lines in the opinion of "wc -l". (In the case of a tie, output any one of the applicable file names.)
+
+PATH=/bin:/usr/bin
+
+if test $# -eq 0
+then
+    echo usage: $0 file ... >&2
+    exit 1
+fi
+
+max=-1
+for i
+do
+    this=`wc -l <"$i"`
+    if test $this -gt $max
+    then
+	max=$this
+	maxname="$i"
+    fi
+done
+echo "$maxname"
+
+Q: Write a shell script which expects a number as its only command-line argument (e.g. if it is called "file", someone might type "sh file 3") and in a loop, keeps squaring and outputting the number until it exceeds 1000000.
+
+PATH=/bin:/usr/bin
+
+if test $# -ne 1
+then
+    echo usage: $0 number >&2
+    exit 1
+fi
+
+x=$1
+echo $x
+while test $x -le 1000000
+do
+    x=`expr $x \* $x`
+    echo $x
+done
+
+Q: Write a shell script to perform this algorithm. The two input values will appear on the command line. You can assume that they are integers (if present -- you still have to check the argument count). Note that the "expr" command has a '%' operator.
+
+PATH=/bin:/usr/bin
+
+if test $# -ne 2
+then
+    echo usage: gcd x y >&2
+    exit 1
+fi
+
+x=$1
+y=$2
+while test $y -gt 0
+do
+    t=$x
+    x=$y
+    y=`expr $t % $y`
+done
+echo $x
+
+Q: Write a shell script in the sh programming language to play a guessing game as follows, where the user's number is between 0 and 100 inclusive
+
+PATH=/bin:/usr/bin
+
+low=0
+high=101
+
+while test $low -lt `expr $high - 1`
+do
+    guess=`expr $low + $high`
+    guess=`expr $guess / 2`
+    echo "Is your number >=$guess or <$guess?  Enter 'g' or 'l'."
+    read input
+    case "$input" in
+	l)
+	    high=$guess
+	    ;;
+	g)
+	    low=$guess
+	    ;;
+    esac
+done
+echo Your number must be $low.
+
+Q: Fibonacci sequence in sh up to the last number less than 1000
+
+PATH=/bin:/usr/bin
+
+this=0
+nextaddition=1
+while test $this -lt 1000
+do
+    echo $this
+    new=`expr $this + $nextaddition`
+    nextaddition=$this
+    this=$new
+done
+
+Q:  Write a shell script (in the sh programming language) which takes a grep pattern and a file name, and outputs the single line in the specified file which matches that pattern.
+If other than exactly one line matches, this is an error. If no lines match, there should be no output (to stderr or to stdout), but the shell script should exit with exit status 1. If more than one line matches, output a suitable error message to stderr, and nothing to stdout.
+
+PATH=/bin:/usr/bin
+
+if test $# -ne 2
+then
+    echo usage: $0 pattern file >&2
+    exit 1
+fi
+
+case "`grep "$@" | wc -l`" in
+    0)
+        # either a grep error (already output to stderr) or no match
+        exit 1
+        ;;
+    1)
+        # success
+        grep "$@"
+        exit 0
+        ;;
+    *)
+        echo $0: too many matches >&2
+        exit 1
+        ;;
+esac
+
+Q: Write a program which creates five child processes, numbered 0 through 4. Each child process computes the sum of the integers 5i through 5i+4, where i is its index number. It then returns this value as the process exit status. The parent waits for them all and outputs the total of the exit statuses, which will be the sum of the integers from 0 to 24 inclusive.
+
+int main()
+{
+    int sum, i, status;
+    extern void doit(int i);
+
+    for (i = 0; i < 5; i++)
+        if (fork() == 0)
+            doit(i);
+    for (sum = i = 0; i < 5; i++) {
+        wait(&status);
+        sum += (status >> 8);
+    }
+    printf("%d\n", sum);
+    return(0);
+}
+
+void doit(int i)
+{
+    int j, sum = 0;
+    i *= 5;
+    for (j = 0; j < 5; j++)
+        sum += i + j;
+    _exit(sum);
+}
+
+Q: There is a network server program in /usr/local/sbin/myserver. It is buggy and frequently crashes. Fortunately, when it gets into trouble it tends to give a segmentation exception and terminate, so it is easy to tell when it has crashed. Write a complete C program which invokes /usr/local/sbin/myserver, and restarts it when it exits. After /usr/local/sbin/myserver exits, you should sleep for three seconds and then execute it again, and loop.
+
+int main()
+{
+    int status;
+    while (1) {
+	switch (fork()) {
+	case -1:
+	    perror("fork");
+	    exit(1);
+	case 0:
+	    execl("/usr/local/sbin/myserver", "/usr/local/sbin/myserver", (char *)NULL);
+	    perror("/usr/local/sbin/myserver");
+	    exit(1);
+	default:
+	    wait(&status);
+	}
+	sleep(3);
+    }
+}
+
+Q: Write a simple ls
+
+#include <dirent.h>
+
+int main(int argc, char **argv)
+{
+    DIR *dp;
+    struct dirent *p;
+    int i, status = 0;
+
+    for (i = 1; i < argc; i++) {
+	if ((dp = opendir(argv[i])) == NULL) {
+	    perror(argv[i]);
+	    status++;
+	} else {
+	    while ((p = readdir(dp)))
+		printf("%s\n", p->d_name);
+	    closedir(dp);
+	}
+    }
+
+    return(status);
+}
+
+Q: Using opendir() and friends and running stat() on each file in the directory, write a program which displays the size in bytes of the largest file in a directory specified on the command-line (i.e. in argv).
+
+int main(int argc, char **argv)
+{
+    DIR *dp;
+    struct dirent *p;
+    int i, status = 0, len;
+    long max;
+    char buf[200];
+    struct stat statbuf;
+
+    for (i = 1; i < argc; i++) {
+	if ((len = strlen(argv[i])) + 2 > sizeof buf) {
+	    fprintf(stderr, "%s: directory name too long\n", argv[i]);
+	    status++;
+	} else if ((dp = opendir(argv[i])) == NULL) {
+	    perror(argv[i]);
+	    status++;
+	} else {
+	    sprintf(buf, "%s/", argv[i]);
+	    len++;  /* now buf[len] is the first byte after that slash */
+	    max = 0;
+	    while ((p = readdir(dp))) {
+		if (strlen(p->d_name) + len + 1 > sizeof buf) {
+		    buf[len] = '\0';
+		    fprintf(stderr, "%s%s: filename too long\n", buf,
+			    p->d_name);
+		    status = 1;
+		} else {
+		    strcpy(buf + len, p->d_name);  /* a concatenation */
+		    if (stat(buf, &statbuf)) {
+				perror(buf);
+				status++;
+		    } else if (statbuf.st_size > max) {
+				max = statbuf.st_size;
+		    }
+		}
+	    }
+	    closedir(dp);
+	    printf("%s: %ld\n", argv[i], max);
+	}
+    }
+
+    return(status);
+}
+
+Q: Write pwd.c
+
+int main()
+{
+    struct stat statbuf;
+    ino_t childdir;
+    DIR *dp;
+    struct dirent *r;
+
+    while (1) {
+        if (lstat(".", &statbuf)) {
+            perror("lstat(\".\")");
+            return(1);
+        }
+        if (statbuf.st_ino == 2)
+            break;
+        childdir = statbuf.st_ino;
+        if (chdir("..")) {
+            perror("chdir(\"..\")");
+            return(1);
+        }
+        if ((dp = opendir(".")) == NULL) {
+            perror("opendir(\"..\")");
+            return(1);
+        }
+        while ((r = readdir(dp)) && r->d_ino != childdir)
+	    ;
+        if (!r) {
+            fprintf(stderr, "Can't find %ld in parent!\n", (long)childdir);
+            return(1);
+        }
+        printf("%s\n", r->d_name);
+        closedir(dp);
+    }
+    printf("and then we're at the root directory.\n");
+    return(0);
+}
+
+Q: Write echo
+
+int main(int argc, char **argv)
+{
+    for (argc--, argv++; argc > 0; argc--, argv++)
+	printf("%s%c", *argv, (argc == 1) ? '\n' : ' ');
+    return 0;
+}
+
+
+Q: Command-line arguments are file names. Stat them and decrease their mtime by one hour using utimes(). 
+
+#define ONEHOUR (60 * 60)
+
+int main(int argc, char **argv)
+{
+    struct stat statbuf;
+    struct timeval times[2];
+    int status = 0;
+
+    if (argc < 2) {
+	fprintf(stderr, "usage: %s file ...\n", argv[0]);
+	return(1);
+    }
+
+    times[0].tv_usec = times[1].tv_usec = 0;
+
+    while (--argc > 0) {
+	argv++;
+	if (stat(*argv, &statbuf)) {
+	    perror(*argv);
+	    status++;
+	} else {
+	    times[0].tv_sec = times[1].tv_sec = statbuf.st_mtime - ONEHOUR;
+	    utimes(*argv, times);
+	}
+    }
+
+    return(status);
+}
+
+Q: Write a simplified "expr" command in C.
+
+int main(int argc, char **argv)
+{
+    int b;
+
+    if (argc != 4 || strlen(argv[2]) != 1 || !strchr("+-*/", argv[2][0])) {
+	fprintf(stderr, "usage: %s number op number\n", argv[0]);
+        return(1);
+    }
+
+    switch (argv[2][0]) {
+    case '+':
+        printf("%d\n", atoi(argv[1]) + atoi(argv[3]));
+        break;
+    case '-':
+        printf("%d\n", atoi(argv[1]) - atoi(argv[3]));
+        break;
+    case '*':
+        printf("%d\n", atoi(argv[1]) * atoi(argv[3]));
+        break;
+    case '/':
+        if ((b = atoi(argv[3])) == 0) {
+            fprintf(stderr, "%s: divide by zero error\n", argv[0]);
+            return(1);
+        }
+        printf("%d\n", atoi(argv[1]) / b);
+        break;
+    }
+
+    return(0);
+}
+
+Q: Write a simplified "tr" command in C.
+
+
+int main(int argc, char **argv)
+{
+    int dflag, c;
+
+    if (argc != 3) {
+        fprintf(stderr, "usage: %s {fromchar tochar | -d delchar}\n", argv[0]);
+        return(1);
+    }
+    dflag = (strcmp(argv[1], "-d") == 0);
+    if ((!dflag && strlen(argv[1]) != 1) || strlen(argv[2]) != 1) {
+        fprintf(stderr, "%s: argument must be a single character\n", argv[0]);
+        return(1);
+    }
+    if (dflag) {
+        while ((c = getchar()) != EOF)
+            if (c != argv[2][0])
+                putchar(c);
+    } else {
+        while ((c = getchar()) != EOF)
+            if (c == argv[1][0])
+                putchar(argv[2][0]);
+            else
+                putchar(c);
+    }
+    return(0);
+}
+
+Q: Write a simplified "putc"
+
+int putc(int c, FILE *fp)
+{
+	char ch;
+
+	ch = c;
+	write(fp->fd, &ch, 1);
+	return(c);
+}
+
+int fputc(int c, FILE *fp)
+{
+	return putc(c, fp);
+}
+
+Q: Write the "head" command in C.
+
+int main(int argc, char **argv)
+{
+    int c, status = 0, n = 10;
+    FILE *fp;
+    extern void process(FILE *fp, int lines);
+
+    while ((c = getopt(argc, argv, "n:")) != EOF) {
+        if (c == 'n') {
+            /* (for this exam question, calling atoi() was fine) */
+            char tmp;
+            if (sscanf(optarg, "%d%c", &n, &tmp) != 1)
+                status = 1;
+        } else {
+            status = 1;
+        }
+    }
+    if (status) {
+        fprintf(stderr, "usage: %s [-n num] [file ...]\n", argv[0]);
+        return(1);
+    }
+
+    if (optind == argc) {
+        process(stdin, n);
+    } else {
+        for (; optind < argc; optind++) {
+            if ((fp = fopen(argv[optind], "r")) == NULL) {
+                perror(argv[optind]);
+                status = 1;
+            } else {
+                process(fp, n);
+                fclose(fp);
+            }
+        }
+    }
+
+    return(status);
+}
+
+void process(FILE *fp, int lines)
+{
+    char buf[500];
+    for (; lines > 0 && fgets(buf, sizeof buf, fp); lines--)
+        printf("%s", buf);
+}
+
+Q: Write "fputs" in C.
+
+int fputs(const char *p, FILE *fp)
+{
+	write (fp->fd, p, strlen (p));
+	return(0);
+}
+
+Q: Write the "system" library function in C.
+
+
+int system(char *cmd)
+{
+    int pid = fork();
+    if (pid < 0)
+        return(-1);
+    if (pid == 0) {
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        perror("/bin/sh");
+        exit(127);
+    } else {
+        int status;
+        wait(&status);
+        return(status >> 8);
+    }
+}
+
+Q: getopt in shell script using shift command
+
+#!/bin/sh
+PATH=/bin:/usr/bin
+
+# default is no -x, and -c12
+xflag=
+count=12
+
+if t=`getopt c:x $*`
+then
+    :
+else
+    echo usage: $0 \[-c count\] \[-x\] \[name ...\] >&2
+    exit 1
+fi
+
+set -- $t
+
+while test $# -gt 0 && test "x$1" != x--
+do
+    case "$1" in
+	-c)
+	    shift
+	    count="$1"
+	    ;;
+	-x)
+	    xflag=1
+	    ;;
+    esac
+    shift
+done
+shift
+
+echo Command-line options:
+echo '   ' count is $count
+if test $xflag
+then
+    echo '   ' x flag is on
+else
+    echo '   ' x flag is off
+fi
+
+if test $# -gt 0
+then
+    for i
+    do
+	echo arg $i
+    done
+else
+    echo and there are no further arguments.
+fi
+
+Q: How to implement "cmd >file"
+
+int main()
+{
+    int x = fork();
+    if (x == -1) {
+	perror("fork");
+	return(1);
+    } else if (x == 0) {
+        /* child */
+        close(1);
+        if (open("file", O_WRONLY|O_CREAT|O_TRUNC, 0666) < 0) {
+	    perror("file");
+	    return(1);
+	}
+        execl("/bin/ls", "ls", (char *)NULL);
+        perror("/bin/ls");
+        return(1);
+    } else {
+        /* parent */
+        int status, pid;
+        pid = wait(&status);
+        printf("pid %d exit status %d\n", pid, status >> 8);
+        return(0);
+    }
+}
+
+Q: How to implement "cmd1 | cmd2"
+
+int main()
+{
+    int pid, status;
+    extern void docommand();
+
+    printf("Executing 'ls | tr e f'\n");
+    fflush(stdout);  
+    switch ((pid = fork())) {
+    case -1:
+        perror("fork");
+        break;
+    case 0:
+        docommand();
+        break;  /* not reached */
+    default:
+        printf("fork() returns child pid of %d\n", pid);
+        pid = wait(&status);
+        printf("wait() returns child pid of %d\n", pid);
+        printf("Child exit status was %d\n", status >> 8);
+    }
+
+    return(0);
+}
+
+void docommand() 
+{
+    int pipefd[2];
+
+    if (pipe(pipefd)) {
+		perror("pipe");
+		exit(127);
+    }
+    
+    switch (fork()) {
+    case -1:
+        perror("fork");
+        exit(127);
+    case 0:
+        close(pipefd[0]);  
+        dup2(pipefd[1], 1); 
+        close(pipefd[1]); 
+        execl("/bin/ls", "ls", (char *)NULL);
+        perror("/bin/ls");
+        exit(126);
+    default:
+        close(pipefd[1]); 
+        dup2(pipefd[0], 0);
+        close(pipefd[0]); 
+        execl("/usr/bin/tr", "tr", "e", "f", (char *)NULL);
+        perror("/usr/bin/tr");
+        exit(125);
+    }
+}
+
+Q: Ignore all signal commands so that nothing can interrupt the current process.
+
+int main()
+{
+    int i;
+    for (i = 0; i < 256; i++)
+		signal(i, SIG_IGN);
+    printf("starting\n");
+    sleep(4);
+    printf("done\n");
+    return(0);
+}
+
+Q: Write string functions.
+
+void mystrcpy(char *s, char *t)
+{
+    while (*s++ = *t++)
+	;
+}
+
+int mystrlen(char *s)
+{
+    int count = 0;
+    while (*s++)
+	count++;
+    return(count);
+}
+
+char *mystrchr(char *s, int c)
+{
+    while (*s && *s != c)
+	s++;
+    if (*s == '\0' && c)
+	return(NULL);
+    else
+	return(s);
+}
+
+char *mystrrchr(char *s, int c)
+{
+    char *retval = NULL;
+    for (; *s; s++)
+	if (*s == c)
+	    retval = s;
+    return(retval);
+}
+
+int mystrcmp(char *s, char *t)
+{
+    while (*s == *t && *s) {
+	s++;
+	t++;
+    }
+    return(*s - *t);
+}
+
+void myfgets(char *s, int size, FILE *fp)
+{
+    char *limit = s + size - 1;
+    int c;
+    while ((c = getc(fp)) != EOF && s < limit) {
+		*s++ = c;
+		if (c == '\n')
+	    	break;
+    	}
+    *s = '\0';
+}
+
+Create a list of the words in file1, one per line, where a word is taken to be a maximal string of letters.
+           tr -cs "[:alpha:]" "\n" < file1
+           
+Translate the contents of file1 to upper-case.
+           tr "[:lower:]" "[:upper:]" < file1
+
+Word-frequency count in a document.
+    tr -cs a-zA-Z0-9 '\012' <file | tr A-Z a-z | sort | uniq -c
+    
+Q: "ispalindrome.c" from Tutorial 5
+
+int main(int argc, char **argv)
+{
+    char *p, *q;
+
+    if (argc != 2) {
+	fprintf(stderr, "usage: %s string\n", argv[0]);
+	return(1);
+    }
+
+    p = argv[1];
+    q = p + strlen(p);  /* note: relying on the fact that isalnum(0) is false */
+    while (p < q) {
+	if (!isalnum(*p)) {
+	    p++;
+	} else if (!isalnum(*q)) {
+	    q--;
+	} else if (tolower(*p) == tolower(*q)) {
+	    p++;
+	    q--;
+	} else {
+	    return(1);
+	}
+    }
+    return(0);
+}
+
+Q: linked list tutorial stuff
+
+struct item {
+    int key;
+    int data;
+    struct item *next;
+};
+
+struct item *head = NULL;
+
+int main()
+{
+    extern void insert(int key, int data), delete(int key), printall();
+    extern int search(int key);
+    return(0);
+}
+
+void insert(int key, int data)
+{
+    struct item *new, **pp;
+
+    if ((new = malloc(sizeof(struct item))) == NULL) {
+        fprintf(stderr, "out of memory!\n");  /* unlikely */
+        exit(1);
+    }
+    new->key = key;
+    new->data = data;
+
+    for (pp = &head; *pp && (*pp)->key < key; pp = &(*pp)->next)
+        ;
+
+    new->next = *pp;
+    *pp = new;
+}
+
+void delete(int key)
+{
+    struct item **pp;
+
+    for (pp = &head; *pp && (*pp)->key < key; pp = &(*pp)->next)
+        ;
+
+    if (*pp && (*pp)->key == key) {
+        struct item *next = (*pp)->next;
+        free(*pp);
+        *pp = next;
+    }
+}
+
+int search(int key) /* returns -1 if not found */
+{
+    struct item *p;
+
+    for (p = head; p && p->key < key; p = p->next)
+        ;
+    if (p && p->key == key)
+        return(p->data);
+    else
+        return(-1);
+}
+
+void printall()
+{
+    struct item *p;
+    for (p = head; p; p = p->next)
+        printf("%d: %d\n", p->key, p->data);
+    printf("[end]\n");
+}
+
+Q: Write the "fread/write" command
+*just change read to write*
+#include <stdio.h>
+#include <unistd.h>
+
+/**  fread(src,size,count,fp) -- Read buffer from stream */
+
+size_t fread (void *src, size_t size, size_t count, FILE *fp)
+{
+	int n;
+	n = read(fp->fd, src, size * count);
+	return (n / size);
+}
+
+
+
+
+
+
+
+
+
+

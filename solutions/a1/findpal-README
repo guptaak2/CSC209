@@ -1,0 +1,8 @@
+This solution illustrates a more elegant way to pick up 'permute' and
+'ispalindrome' from the correct directory.  Remember that PATH is where the
+shell finds commands when you type a command which does not contain a slash.
+
+You didn't have to do this for this assignment, but in real life, every shell
+script should start with an assignment to the PATH variable (usually saying
+simply /bin:/usr/bin).  Explanation at
+https://cs.utm.utoronto.ca/~ajr/209/notes/tiny/path.html

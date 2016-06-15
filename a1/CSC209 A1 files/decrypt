@@ -1,0 +1,7 @@
+(
+	rotation=/student/csc209/a1/rot
+	for (( a=1; a<=25; a++ ))
+	do	
+		echo $* | echo $($rotation $a)
+	done
+)

@@ -1,0 +1,1 @@
+The "cd" command has to be built-in rather than run in a child-process because we need to change the current working directory of the shell itself and not the child-process we get after we run fork. We can further verify this from the cd manpage. There is a list of commands there which can only be built-in and not implemented because they directly modify the shell. 

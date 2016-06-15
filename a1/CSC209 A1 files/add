@@ -1,0 +1,9 @@
+(
+	SUM=0
+	cat $* | tr -cs "[:digit:]" "\n" | (while read i
+	do
+		SUM=`expr $SUM + $i`
+	done 
+	echo $SUM
+	)
+)

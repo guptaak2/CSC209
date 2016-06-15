@@ -1,0 +1,31 @@
+[guptaak2@cslinux a4]$ nc -l 2345
+chatsvr 305975789
+Marvin
+hey
+this is so cool
+professor alamss
+professor alan is the best
+hey marvin, 2+4
+he 
+hey marvin, 2+4
+305975789: hey marvin, 2+4
+Hey 305975789, 6
+
+akhil: hey marvin, 2+4
+Hey akhil, 6
+
+
+[guptaak2@cslinux a4]$ ./marvin localhost 2345
+hey
+this is so cool
+professor alamn^Hss
+professor alan is the best
+hey marvin, 2+4
+he ^H
+hey marvin, 2+4
+305975789: hey marvin, 2+4
+
+akhil: hey marvin, 2+4
+Server shut down
+
+
